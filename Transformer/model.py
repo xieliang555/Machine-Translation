@@ -81,31 +81,40 @@ class PostionalEncoding(nn.Module):
         return x
 
 
-def greedy_decoder(model, src, trg):
+# ?
+def greedy_decoder(model, src, tgt):
     '''
         only using src to generate decoder input
     Args:
         src: [S, N]
-        trg: [T, N]
+        tgt: [T, N]
     Return:
-        trg: ['<sos>', 'w1', 'w2'...'wn']
+        ['<sos>', 'w1', 'w2'...'wn']
     '''
     src_pad_mask = model.get_pad_mask(src)
     tgt_pad_mask = model.get_pad_mask(tgt)
     memory_pad_mask = model.get_pad_mask(src)
-    tgt_subsequent_mask = model.get_square_subsequence_mask(tgt)
-
+    tgt_subsequent_mask = model.get_square_subsequent_mask(tgt)
+    
+    src = model.embedding(src) * math.sqrt(model.d_model)
+    src = model.dropout(model.pos_encoder(src))
     encoder_outputs = model.transformer.encoder(
-        src, src_key_padding_mask=src_pad_mask)
-    decoder_inputs = copy.deepcopy(trg)
-    for t in range(1, len(decoder_inputs)):
+        src, mask=None, src_key_padding_mask=src_pad_mask)
+    
+    ret = tgt.clone()
+    tgt = model.embedding(tgt) * math.sqrt(model.d_model)
+    tgt = model.dropout(model.pos_encoder(tgt))
+
+    for t in range(1, len(ret)):
         decoder_outputs = model.transformer.decoder(
-            decoder_inputs, encoder_outputs, tgt_mask=tgt_subsequent_mask,
+            tgt, encoder_outputs, tgt_mask=tgt_subsequent_mask,
             tgt_key_padding_mask=tgt_pad_mask, memory_key_padding_mask=memory_pad_mask)
         outs = model.out(decoder_outputs)
-        decoder_inputs[t] = outs.max(-1)[1][t-1]
+        ret[t] = outs.max(-1)[1][t-1]
+        tgt = model.embedding(ret) * math.sqrt(model.d_model)
+        tgt = model.dropout(model.pos_encoder(tgt))
         
-    return decoder_inputs
+    return ret
 
 
 def train(model, train_iter, criterion, optimizer, TRG, epoch, writer, device):
@@ -168,8 +177,8 @@ def test(model, test_iter, criterion, TRG, device):
         src = batch.src.to(device)
         target = batch.trg.to(device)
 
-        tgt = greedy_decoder(src, target[:-1, :])
-        output = model(model, src, tgt)
+        tgt = greedy_decoder(model, src, target[:-1, :])
+        output = model(src, tgt)
         loss = criterion(
             output.view(-1, output.shape[-1]), target[1:, :].view(-1))
 
