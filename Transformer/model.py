@@ -82,7 +82,7 @@ class PostionalEncoding(nn.Module):
 
 
 # ?
-def greedy_decoder(model, src, tgt):
+def greedy_decoder(model, src, tgt, device):
     '''
         only using src to generate decoder input
     Args:
@@ -91,17 +91,17 @@ def greedy_decoder(model, src, tgt):
     Return:
         ['<sos>', 'w1', 'w2'...'wn']
     '''
-    src_pad_mask = model.get_pad_mask(src)
-    tgt_pad_mask = model.get_pad_mask(tgt)
-    memory_pad_mask = model.get_pad_mask(src)
-    tgt_subsequent_mask = model.get_square_subsequent_mask(tgt)
+    src_pad_mask = model.get_pad_mask(src).to(device)
+    tgt_pad_mask = model.get_pad_mask(tgt).to(device)
+    memory_pad_mask = model.get_pad_mask(src).to(device)
+    tgt_subsequent_mask = model.get_square_subsequent_mask(tgt).to(device)
     
     src = model.embedding(src) * math.sqrt(model.d_model)
     src = model.dropout(model.pos_encoder(src))
     encoder_outputs = model.transformer.encoder(
         src, mask=None, src_key_padding_mask=src_pad_mask)
     
-    ret = tgt.clone()
+    ret = tgt.clone().to(device)
     tgt = model.embedding(tgt) * math.sqrt(model.d_model)
     tgt = model.dropout(model.pos_encoder(tgt))
 
@@ -140,12 +140,12 @@ def train(model, train_iter, criterion, optimizer, TRG, epoch, writer, device):
         running_loss += batch_loss
         running_bleu += batch_bleu
 
-        if batch_idx % 500 == 499:
+        if batch_idx % 360 == 359:
             writer.add_scalar('train loss',
-                              running_loss / 500,
+                              running_loss / 360,
                               epoch * len(train_iter) + batch_idx)
             writer.add_scalar('train bleu',
-                              running_bleu / 500,
+                              running_bleu / 360,
                               epoch * len(train_iter) + batch_idx)
 
             running_loss = 0.0
@@ -177,7 +177,7 @@ def test(model, test_iter, criterion, TRG, device):
         src = batch.src.to(device)
         target = batch.trg.to(device)
 
-        tgt = greedy_decoder(model, src, target[:-1, :])
+        tgt = greedy_decoder(model, src, target[:-1, :], device)
         output = model(src, tgt)
         loss = criterion(
             output.view(-1, output.shape[-1]), target[1:, :].view(-1))
