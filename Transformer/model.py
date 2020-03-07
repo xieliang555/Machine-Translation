@@ -139,11 +139,14 @@ def train(model, train_iter, criterion, optimizer, TRG, epoch, writer, device):
         epoch_bleu += batch_bleu
         running_loss += batch_loss
         running_bleu += batch_bleu
+<<<<<<< HEAD
         
         
         # ?
         if batch_idx == 0:
             break
+=======
+>>>>>>> b603c481efc172e69880863a6148a5f70bc87bfb
 
         if batch_idx % 360 == 359:
             writer.add_scalar('train loss',
