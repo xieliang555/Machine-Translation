@@ -1,0 +1,15 @@
+Transformer/save
+Transformer/log
+Transformer/.data
+Transformer/__pycache__
+Transformer/.ipynb_checkpoints
+
+RNN_Attention/save
+RNN_Attention/log
+RNN_Attention/.data
+RNN_Attention/__pycache__
+RNN_Attention/.ipynb_checkpoints
+
+
+*.DS_Store
+
