@@ -81,7 +81,7 @@ class PostionalEncoding(nn.Module):
         return x
 
 
-# ?
+# beam search >1 ?
 def greedy_decoder(model, src, tgt, device):
     '''
         only using src to generate decoder input
@@ -119,8 +119,6 @@ def greedy_decoder(model, src, tgt, device):
 
 def train(model, train_iter, criterion, optimizer, TRG, epoch, writer, device):
     model.train()
-    epoch_loss = 0.0
-    epoch_bleu = 0.0
     running_loss = 0.0
     running_bleu = 0.0
     for batch_idx, batch in enumerate(train_iter):
@@ -133,33 +131,22 @@ def train(model, train_iter, criterion, optimizer, TRG, epoch, writer, device):
         loss.backward()
         optimizer.step()
 
-        batch_loss = loss.item()
-        batch_bleu = utils.count_bleu(output, trg[1:, :], TRG)
-        epoch_loss += batch_loss
-        epoch_bleu += batch_bleu
-        running_loss += batch_loss
-        running_bleu += batch_bleu
-<<<<<<< HEAD
-        
-        
-        # ?
-        if batch_idx == 0:
-            break
-=======
->>>>>>> b603c481efc172e69880863a6148a5f70bc87bfb
+        running_loss += loss.item()
+        running_bleu += utils.count_bleu(output, trg[1:, :], TRG)
 
-        if batch_idx % 360 == 359:
+        if batch_idx % 25 == 24:
             writer.add_scalar('train loss',
-                              running_loss / 360,
+                              running_loss / 25,
                               epoch * len(train_iter) + batch_idx)
             writer.add_scalar('train bleu',
-                              running_bleu / 360,
+                              running_bleu / 25,
                               epoch * len(train_iter) + batch_idx)
 
             running_loss = 0.0
             running_bleu = 0.0
 
-
+            
+# combine evaluate and test
 def evaluate(model, val_iter, criterion, TRG, device):
     model.eval()
     epoch_loss = 0.0
@@ -181,16 +168,15 @@ def test(model, test_iter, criterion, TRG, device):
     model.eval()
     epoch_loss = 0.0
     epoch_bleu = 0.0
-    for batch_idx, batch in enumerate(test_iter):
+    for batch_idx, batch in enumerate(test_iter):    
         src = batch.src.to(device)
         target = batch.trg.to(device)
-
         tgt = greedy_decoder(model, src, target[:-1, :], device)
+        # to compute loss
         output = model(src, tgt)
-        loss = criterion(
-            output.view(-1, output.shape[-1]), target[1:, :].view(-1))
+        loss = criterion(output.view(-1, output.shape[-1]), target[1:, :].view(-1))
 
         epoch_loss += loss.item()
         epoch_bleu += utils.count_bleu(output, target[1:, :], TRG)
-
-    return epoch_loss / len(test_iter), epoch_bleu / len(test_iter)
+        
+    return epoch_loss / len(test_iter) , epoch_bleu / len(test_iter)

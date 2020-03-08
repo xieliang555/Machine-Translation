@@ -6,10 +6,11 @@ def itos(idx_list, TRG):
     return sentence
 
 
+# sentence level ?
 def count_bleu(output, trg, TRG):
     # output shape: [T, N, E]
     # trg shape: [T, N]
-    # corpus level
+    # using corpus level
     output = output.permute(1, 0, 2).max(2)[1]
     trg = trg.permute(1, 0)
     
