@@ -79,42 +79,58 @@ class PostionalEncoding(nn.Module):
     def forward(self, x):
         x = x + self.pe[:x.size(0), :]
         return x
-
-
-# beam search >1 ?
+    
+    
+# beam search > 1 ?
 def greedy_decoder(model, src, tgt, device):
     '''
-        only using src to generate decoder input
-    Args:
+    Arges:
         src: [S, N]
         tgt: [T, N]
     Return:
-        ['<sos>', 'w1', 'w2'...'wn']
+        ret: ['<sos>', 'w1', 'w2'...'wn']
     '''
-    src_pad_mask = model.get_pad_mask(src).to(device)
-    tgt_pad_mask = model.get_pad_mask(tgt).to(device)
-    memory_pad_mask = model.get_pad_mask(src).to(device)
-    tgt_subsequent_mask = model.get_square_subsequent_mask(tgt).to(device)
-    
-    src = model.embedding(src) * math.sqrt(model.d_model)
-    src = model.dropout(model.pos_encoder(src))
-    encoder_outputs = model.transformer.encoder(
-        src, mask=None, src_key_padding_mask=src_pad_mask)
-    
-    ret = tgt.clone().to(device)
-    tgt = model.embedding(tgt) * math.sqrt(model.d_model)
-    tgt = model.dropout(model.pos_encoder(tgt))
-
-    for t in range(1, len(ret)):
-        decoder_outputs = model.transformer.decoder(
-            tgt, encoder_outputs, tgt_mask=tgt_subsequent_mask,
-            tgt_key_padding_mask=tgt_pad_mask, memory_key_padding_mask=memory_pad_mask)
-        outs = model.out(decoder_outputs)
-        ret[t] = outs.max(-1)[1][t-1]
-        tgt = model.embedding(ret) * math.sqrt(model.d_model)
-        tgt = model.dropout(model.pos_encoder(tgt))
-        
+    ret = tgt.clone()
+    for t in range(1, ret.size(0)):
+        out = model(src, ret)
+        ret[t] = out.max(-1)[1][t-1]
     return ret
+    
+
+# # beam search >1 ?
+# def greedy_decoder(model, src, tgt, device):
+#     '''
+#         only using src to generate decoder input
+#     Args:
+#         src: [S, N]
+#         tgt: [T, N]
+#     Return:
+#         ['<sos>', 'w1', 'w2'...'wn']
+#     '''
+#     src_pad_mask = model.get_pad_mask(src).to(device)
+#     tgt_pad_mask = model.get_pad_mask(tgt).to(device)
+#     memory_pad_mask = model.get_pad_mask(src).to(device)
+#     tgt_subsequent_mask = model.get_square_subsequent_mask(tgt).to(device)
+    
+#     src = model.embedding(src) * math.sqrt(model.d_model)
+#     src = model.dropout(model.pos_encoder(src))
+#     encoder_outputs = model.transformer.encoder(
+#         src, mask=None, src_key_padding_mask=src_pad_mask)
+    
+#     ret = tgt.clone().to(device)
+#     tgt = model.embedding(tgt) * math.sqrt(model.d_model)
+#     tgt = model.dropout(model.pos_encoder(tgt))
+
+#     for t in range(1, len(ret)):
+#         decoder_outputs = model.transformer.decoder(
+#             tgt, encoder_outputs, tgt_mask=tgt_subsequent_mask,
+#             tgt_key_padding_mask=tgt_pad_mask, memory_key_padding_mask=memory_pad_mask)
+#         outs = model.out(decoder_outputs)
+#         ret[t] = outs.max(-1)[1][t-1]
+#         tgt = model.embedding(ret) * math.sqrt(model.d_model)
+#         tgt = model.dropout(model.pos_encoder(tgt))
+        
+#     return ret
 
 
 def train(model, train_iter, criterion, optimizer, TRG, epoch, writer, device):
@@ -147,7 +163,7 @@ def train(model, train_iter, criterion, optimizer, TRG, epoch, writer, device):
 
             
 # combine evaluate and test
-def evaluate(model, val_iter, criterion, TRG, device):
+def evaluate(model, val_iter, criterion, TRG, epoch, writer, device):
     model.eval()
     epoch_loss = 0.0
     epoch_bleu = 0.0
@@ -160,8 +176,12 @@ def evaluate(model, val_iter, criterion, TRG, device):
 
         epoch_loss += loss.item()
         epoch_bleu += utils.count_bleu(output, tgt[1:, :], TRG)
-
-    return epoch_loss / len(val_iter), epoch_bleu / len(val_iter)
+        
+    epoch_loss /= len(val_iter)
+    epoch_bleu /= len(val_iter)
+    writer.add_scalar('val loss', epoch_loss, epoch)
+    writer.add_scalar('val bleu', epoch_blue, epoch)
+    return epoch_loss, epoch_bleu
 
 
 def test(model, test_iter, criterion, TRG, device):
@@ -172,6 +192,7 @@ def test(model, test_iter, criterion, TRG, device):
         src = batch.src.to(device)
         target = batch.trg.to(device)
         tgt = greedy_decoder(model, src, target[:-1, :], device)
+
         # to compute loss
         output = model(src, tgt)
         loss = criterion(output.view(-1, output.shape[-1]), target[1:, :].view(-1))
