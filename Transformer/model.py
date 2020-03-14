@@ -167,15 +167,16 @@ def evaluate(model, val_iter, criterion, TRG, epoch, writer, device):
     model.eval()
     epoch_loss = 0.0
     epoch_bleu = 0.0
-    for batch_idx, batch in enumerate(val_iter):
-        src = batch.src.to(device)
-        tgt = batch.trg.to(device)
-        output = model(src, tgt[:-1, :])
-        loss = criterion(
-            output.view(-1, output.shape[-1]), tgt[1:, :].view(-1))
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(val_iter):
+            src = batch.src.to(device)
+            tgt = batch.trg.to(device)
+            output = model(src, tgt[:-1, :])
+            loss = criterion(
+                output.view(-1, output.shape[-1]), tgt[1:, :].view(-1))
 
-        epoch_loss += loss.item()
-        epoch_bleu += utils.count_bleu(output, tgt[1:, :], TRG)
+            epoch_loss += loss.item()
+            epoch_bleu += utils.count_bleu(output, tgt[1:, :], TRG)
         
     epoch_loss /= len(val_iter)
     epoch_bleu /= len(val_iter)
@@ -188,16 +189,17 @@ def test(model, test_iter, criterion, TRG, device):
     model.eval()
     epoch_loss = 0.0
     epoch_bleu = 0.0
-    for batch_idx, batch in enumerate(test_iter):    
-        src = batch.src.to(device)
-        target = batch.trg.to(device)
-        tgt = greedy_decoder(model, src, target[:-1, :], device)
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(test_iter):    
+            src = batch.src.to(device)
+            target = batch.trg.to(device)
+            tgt = greedy_decoder(model, src, target[:-1, :], device)
 
-        # to compute loss
-        output = model(src, tgt)
-        loss = criterion(output.view(-1, output.shape[-1]), target[1:, :].view(-1))
+            # to compute loss
+            output = model(src, tgt)
+            loss = criterion(output.view(-1, output.shape[-1]), target[1:, :].view(-1))
 
-        epoch_loss += loss.item()
-        epoch_bleu += utils.count_bleu(output, target[1:, :], TRG)
+            epoch_loss += loss.item()
+            epoch_bleu += utils.count_bleu(output, target[1:, :], TRG)
         
     return epoch_loss / len(test_iter) , epoch_bleu / len(test_iter)
