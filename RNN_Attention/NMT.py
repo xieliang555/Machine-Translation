@@ -8,16 +8,15 @@ from torch.utils.tensorboard import SummaryWriter
 import random
 from typing import Tuple
 
-import utils
 
 
 class Encoder(nn.Module):
     """
-            input_dim: 		the source vocabulary size
-            emd_dim: 		the source embedding feature dimension
-            enc_hid_dim: 	the encoder hidden feature dimension
-            dec_hid_dim:	the decoder hidden feature dimension
-            dropout:		dropout ratio
+        input_dim:  the source vocabulary size
+        emd_dim:   the source embedding feature dimension
+        enc_hid_dim:  the encoder hidden feature dimension
+        dec_hid_dim:  the decoder hidden feature dimension
+        dropout:  dropout ratio
     """
 
     def __init__(self, input_dim, emd_dim, enc_hid_dim,
@@ -48,7 +47,7 @@ class Encoder(nn.Module):
 
 class Attention(nn.Module):
     """
-            atten_dim: the energy vector dimension
+        atten_dim: the energy vector dimension
     """
 
     def __init__(self, enc_hid_dim, dec_hid_dim, atten_dim):
@@ -73,11 +72,11 @@ class Attention(nn.Module):
 
 class Decoder(nn.Module):
     """
-            output_dim:		the target vocabulary size
-            emd_dim:		the target embedding feature dimension
-            enc_hid_dim:	the encoder hidden feature dimension
-            dec_hid_dim:	the decoder hidden feature dimension
-            dropout:		dropout ratio
+        output_dim:  the target vocabulary size
+        emd_dim:  the target embedding feature dimension
+        enc_hid_dim:  the encoder hidden feature dimension
+        dec_hid_dim:  the decoder hidden feature dimension
+        dropout:  dropout ratio
     """
 
     def __init__(self, output_dim, emd_dim, enc_hid_dim, dec_hid_dim,
@@ -126,26 +125,24 @@ class Decoder(nn.Module):
 
 class Seq2Seq(nn.Module):
     """
-            sequence to sequence forward neuron network
+        sequence to sequence forward neuron network
     """
 
     def __init__(self,
                  encoder: nn.Module,
-                 decoder: nn.Module,
-                 device: torch.device):
+                 decoder: nn.Module):
         super(Seq2Seq, self).__init__()
 
         self.encoder = encoder
         self.decoder = decoder
-        self.device = device
 
-    def forward(self, src, trg, teacher_forcing_ratio=0.5):
+    def forward(self, src, trg, device, teacher_forcing_ratio=0.5):
         batch_size = src.shape[1]
         max_seq_len = trg.shape[0]
         trg_vocab_size = self.decoder.output_dim
 
         outputs = torch.zeros(max_seq_len, batch_size,
-                              trg_vocab_size).to(self.device)
+                              trg_vocab_size).to(device)
         encoder_outputs, hidden = self.encoder(src)
         # first input to the decoder is the '<sos>'
         decoder_input = trg[0, :]
@@ -159,110 +156,3 @@ class Seq2Seq(nn.Module):
             decoder_input = trg[t] if teacher_force else top1
 
         return outputs
-
-
-def train(model, criterion, iterator, optimizer,
-          clip: float,
-          epoch: int,
-          TRG: Field,
-          writer: SummaryWriter):
-    # turn on batch normalization and dropout
-    model.train()
-    epoch_loss = 0
-    epoch_bleu = 0
-    running_loss = 0
-    running_bleu = 0
-
-    for batch_idx, batch in enumerate(iterator):
-
-        src = batch.src
-        trg = batch.trg
-        optimizer.zero_grad()
-        outputs = model(src, trg)
-
-        batch_bleu = utils.count_bleu(outputs, trg, TRG)
-        epoch_bleu += batch_bleu
-        running_bleu += batch_bleu
-
-        # 为什么要在sentence前面加上'<sos>'
-        outputs = outputs[1:].view(-1, outputs.shape[-1])
-        trg = trg[1:].view(-1)
-
-        loss = criterion(outputs, trg)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-        optimizer.step()
-
-        epoch_loss += loss.item()
-        running_loss += loss.item()
-
-        if batch_idx % 1000 == 999:
-            writer.add_scalar('train loss',
-                              running_loss/1000,
-                              epoch*len(iterator)+batch_idx)
-
-            writer.add_scalar('train BLEU',
-                              running_bleu/1000,
-                              epoch*len(iterator)+batch_idx)
-
-            running_bleu = 0
-            running_loss = 0
-
-    return epoch_loss/len(iterator), epoch_bleu/len(iterator)
-
-
-def evaluate(model, criterion, iterator, epoch,
-             TRG: Field,
-             writer: SummaryWriter):
-    # trun off BN and Dropout
-    model.eval()
-    epoch_loss = 0
-    epoch_bleu = 0
-    running_loss = 0
-    running_bleu = 0
-
-    with torch.no_grad():
-        for batch_idx, batch in enumerate(iterator):
-
-            src = batch.src
-            trg = batch.trg
-            # turn off teacher forcing
-            outputs = model(src, trg, 0)
-
-            batch_bleu = utils.count_bleu(outputs, trg, TRG)
-            epoch_bleu += batch_bleu
-            running_bleu += batch_bleu
-
-            outputs = outputs.permute(1, 0, 2)
-            trg = trg.permute(1, 0)
-            outputs = outputs.contiguous().view(-1, outputs.shape[-1])
-            trg = trg.contiguous().view(-1)
-
-            loss = criterion(outputs, trg)
-            epoch_loss += loss.item()
-            running_loss += loss.item()
-
-            if batch_idx % 25 == 24:
-                writer.add_scalar('test loss',
-                                  running_loss/25,
-                                  epoch*len(iterator)+batch_idx)
-
-                writer.add_scalar('test BLEU',
-                                  running_bleu/25,
-                                  epoch*len(iterator)+batch_idx)
-
-                outputs = outputs.max(1)[1]
-                outputs = ' '.join(utils.itos(TRG, outputs))
-                trg = ' '.join(utils.itos(TRG, trg))
-                writer.add_text('test trg',
-                                str(trg),
-                                epoch*len(iterator)+batch_idx)
-
-                writer.add_text('test outputs',
-                                str(outputs),
-                                epoch*len(iterator)+batch_idx)
-
-                running_loss = 0
-                running_bleu = 0
-
-    return epoch_loss/len(iterator), epoch_bleu/len(iterator)
